@@ -62,8 +62,30 @@ fn run() -> Result<()> {
         .nth(1)
         .ok_or(anyhow!("No config provided"))?;
     let directory = std::env::args().nth(2).unwrap_or(DEFAULT_DIRECTORY.into());
-
     let config = Config::from_file(config_path)?;
+
+    let mutable_users = std::env::var("USERBORN_MUTABLE_USERS").is_ok_and(|s| s == "true");
+
+    let previous_config = if mutable_users {
+        log::info!("Mutable users are enabled.");
+
+        let previous_config_path = std::env::var("USERBORN_PREVIOUS_CONFIG")
+            .context("USERBORN_PREVIOUS_CONFIG is not set")?;
+        log::debug!("Reading previous config from {previous_config_path}...");
+
+        if let Ok(prev_config) = Config::from_file(&previous_config_path) {
+            Some(prev_config)
+        } else {
+            log::warn!("Failed to read previous config. Using current config only...");
+            // Using the current config means Userborn will not disable any user or drain any
+            // group. This is mostly here to keep control flow easy.
+            Some(config.clone())
+        }
+    } else {
+        // None means Userborn takes full control over the DBs, disable any users and drain all
+        // groups it doesn't know about.
+        None
+    };
 
     let group_path = format!("{directory}/group");
     let passwd_path = format!("{directory}/passwd");
@@ -73,7 +95,13 @@ fn run() -> Result<()> {
     let mut passwd_db = Passwd::from_file(&passwd_path).unwrap_or_default();
     let mut shadow_db = Shadow::from_file(&shadow_path).unwrap_or_default();
 
-    update_users_and_groups(&config, &mut group_db, &mut passwd_db, &mut shadow_db);
+    update_users_and_groups(
+        &config,
+        previous_config.as_ref(),
+        &mut group_db,
+        &mut passwd_db,
+        &mut shadow_db,
+    );
 
     warn_about_weak_password_hashes(&shadow_db);
 
@@ -92,6 +120,7 @@ fn run() -> Result<()> {
 /// Doesn't actually write anything to disk, only mutates the databases in memory.
 fn update_users_and_groups(
     config: &Config,
+    previous_config: Option<&Config>,
     group_db: &mut Group,
     passwd_db: &mut Passwd,
     shadow_db: &mut Shadow,
@@ -127,8 +156,14 @@ fn update_users_and_groups(
     }
 
     // Find groups in the DB that are not in the config and empty them.
+    let previous_groups = previous_config.map(Config::group_names);
     for entry in group_db.entries_mut() {
-        if !groups_in_config.contains(entry.name()) {
+        if previous_groups
+            .as_ref()
+            .is_none_or(|g| g.contains(entry.name()))
+            && !groups_in_config.contains(entry.name())
+        {
+            log::info!("Draining users from group {}...", entry.name());
             if implicit_primary_groups.contains(entry.name()) {
                 entry.update(BTreeSet::from([entry.name().to_owned()]));
             } else {
@@ -138,8 +173,13 @@ fn update_users_and_groups(
     }
 
     // Find users in the shadow DB that are not in the config and disable them.
+    let previous_users = previous_config.map(Config::user_names);
     for entry in shadow_db.entries_mut() {
-        if !users_in_config.contains(entry.name()) {
+        if previous_users
+            .as_ref()
+            .is_none_or(|u| u.contains(entry.name()))
+            && !users_in_config.contains(entry.name())
+        {
             log::info!("Locking account for user {}...", entry.name());
             entry.lock_account();
         }
@@ -384,6 +424,13 @@ mod tests {
                     "name": "initial",
                     "initialHashedPassword": "$y$j9T$2e5ARUyMfmJ0nW9ZMPFg50$EGgRGQBqq0r/fxRlIRXL86K61o/ESEsIdVZYkyQvyN2",
                 },
+                {
+                    // Userborn now takes ownership of the mutable user
+                    "isNormal": true,
+                    "name": "mutable",
+                    // Userborn will change its password
+                    "hashedPassword": "$y$j9T$JvMN.S5D/7iVsSOh.vK1S1$rWn2Uie/c85gD.gJQZCDHOok6SH.Eg.BR3o6zPIDPM.", // "mutable"
+                },
             ],
             "groups": [
                 {
@@ -418,7 +465,171 @@ mod tests {
         }))?)
     }
 
+    fn useradd(
+        name: &str,
+        group_db: &mut Group,
+        passwd_db: &mut Passwd,
+        shadow_db: &mut Shadow,
+    ) -> Result<()> {
+        let uid = passwd_db.allocate_uid(true)?;
+        passwd_db.insert(&passwd::Entry::new(
+            name.into(),
+            uid,
+            uid,
+            "I was created imperatively".into(),
+            format!("/home/{name}"),
+            "/bin/bash".into(),
+        ))?;
+        shadow_db.insert(&shadow::Entry::new(
+            name.into(),
+            Some("fake-pw-hash".into()),
+        ))?;
+        group_db.insert(&group::Entry::new(
+            name.into(),
+            group_db.allocate_gid(true)?,
+            BTreeSet::from([name.into()]),
+        ))?;
+
+        Ok(())
+    }
+
     #[test]
+    #[allow(clippy::too_many_lines)]
+    fn update_users_and_groups_across_generations_mutable() -> Result<()> {
+        // Explicitly set this because the expected values depend on this.
+        std::env::set_var("USERBORN_NO_LOGIN_PATH", NO_LOGIN_FALLBACK);
+
+        let mut group_db = Group::default();
+        let mut passwd_db = Passwd::default();
+        let mut shadow_db = Shadow::default();
+
+        // This user should not be disabled
+        useradd("mutable", &mut group_db, &mut passwd_db, &mut shadow_db)?;
+
+        let expected_group = expect![[r#"
+            mutable:x:1000:mutable
+        "#]];
+        expected_group.assert_eq(&group_db.to_buffer());
+
+        let expected_passwd = expect![[r#"
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+        "#]];
+        expected_passwd.assert_eq(&passwd_db.to_buffer());
+
+        let expected_shadow = expect![[r#"
+            mutable:fake-pw-hash:1::::::
+        "#]];
+        expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
+
+        // GEN 0
+        let gen0 = gen0()?;
+
+        update_users_and_groups(
+            &gen0,
+            Some(&gen0),
+            &mut group_db,
+            &mut passwd_db,
+            &mut shadow_db,
+        );
+
+        let expected_group = expect![[r#"
+            root:x:0:root
+            wheel:x:999:normalo
+            mutable:x:1000:mutable
+            normalo:x:1001:normalo
+        "#]];
+        expected_group.assert_eq(&group_db.to_buffer());
+
+        let expected_passwd = expect![[r#"
+            root:x:0:0:::/run/current-system/sw/bin/nologin
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+            normalo:x:1001:1001::/home/normalo:/bin/bash
+        "#]];
+        expected_passwd.assert_eq(&passwd_db.to_buffer());
+
+        let expected_shadow = expect![[r#"
+            root:!*:1::::::
+            mutable:fake-pw-hash:1::::::
+            normalo:$y$j9T$BOO.gstYxWh8Lw.njfytQ/$K4sN06nBh0qFGegFS0hn5YkEOzzrr7woGHlSiUuCqS4:1::::::
+        "#]];
+        expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
+
+        // GEN 1
+        let gen1 = gen1()?;
+
+        update_users_and_groups(
+            &gen1,
+            Some(&gen0),
+            &mut group_db,
+            &mut passwd_db,
+            &mut shadow_db,
+        );
+
+        let expected_group = expect![[r#"
+            root:x:0:root
+            initial:x:998:initial
+            wheel:x:999:initial,normalo
+            mutable:x:1000:mutable
+            normalo:x:1001:normalo
+        "#]];
+        expected_group.assert_eq(&group_db.to_buffer());
+
+        let expected_passwd = expect![[r#"
+            root:x:0:0:::/run/current-system/sw/bin/nologin
+            initial:x:999:999:::/run/current-system/sw/bin/nologin
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+            normalo:x:1001:1001::/home/normalo:/bin/zsh
+        "#]];
+        expected_passwd.assert_eq(&passwd_db.to_buffer());
+
+        let expected_shadow = expect![[r#"
+            root:!*:1::::::
+            initial:$y$j9T$2e5ARUyMfmJ0nW9ZMPFg50$EGgRGQBqq0r/fxRlIRXL86K61o/ESEsIdVZYkyQvyN2:1::::::
+            mutable:$y$j9T$JvMN.S5D/7iVsSOh.vK1S1$rWn2Uie/c85gD.gJQZCDHOok6SH.Eg.BR3o6zPIDPM.:1::::::
+            normalo:$y$j9T$BOO.gstYxWh8Lw.njfytQ/$K4sN06nBh0qFGegFS0hn5YkEOzzrr7woGHlSiUuCqS4:1::::::
+        "#]];
+        expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
+
+        // GEN 2
+
+        update_users_and_groups(
+            &gen2()?,
+            Some(&gen1),
+            &mut group_db,
+            &mut passwd_db,
+            &mut shadow_db,
+        );
+
+        let expected_group = expect![[r#"
+            root:x:0:root
+            initial:x:998:initial
+            wheel:x:999:
+            mutable:x:1000:mutable
+            normalo:x:1001:normalo
+        "#]];
+        expected_group.assert_eq(&group_db.to_buffer());
+
+        let expected_passwd = expect![[r#"
+            root:x:0:0::/root:/run/current-system/sw/bin/nologin
+            initial:x:999:999:::/run/current-system/sw/bin/nologin
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+            normalo:x:1001:1001:I'm normal I swear:/home/normalo:/bin/zsh
+        "#]];
+        expected_passwd.assert_eq(&passwd_db.to_buffer());
+
+        let expected_shadow = expect![[r#"
+            root:!*:1::::::
+            initial:!*:1::::::
+            mutable:!*:1::::::
+            normalo:$y$j9T$CZSAJTLCfrBvcCgvOTY4W1$G7uzyX3O6K.DR8KJLL/oL.8EREPSRTIjBn76SpvcH4A:1::::::
+        "#]];
+        expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
+
+        Ok(())
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
     fn update_users_and_groups_across_generations() -> Result<()> {
         // Explicitly set this because the expected values depend on this.
         std::env::set_var("USERBORN_NO_LOGIN_PATH", NO_LOGIN_FALLBACK);
@@ -427,77 +638,122 @@ mod tests {
         let mut passwd_db = Passwd::default();
         let mut shadow_db = Shadow::default();
 
+        // This user should be disabled right away
+        useradd("mutable", &mut group_db, &mut passwd_db, &mut shadow_db)?;
+
+        let expected_group = expect![[r#"
+            mutable:x:1000:mutable
+        "#]];
+        expected_group.assert_eq(&group_db.to_buffer());
+
+        let expected_passwd = expect![[r#"
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+        "#]];
+        expected_passwd.assert_eq(&passwd_db.to_buffer());
+
+        let expected_shadow = expect![[r#"
+            mutable:fake-pw-hash:1::::::
+        "#]];
+        expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
+
         // GEN 0
 
-        update_users_and_groups(&gen0()?, &mut group_db, &mut passwd_db, &mut shadow_db);
+        update_users_and_groups(
+            &gen0()?,
+            None,
+            &mut group_db,
+            &mut passwd_db,
+            &mut shadow_db,
+        );
 
         let expected_group = expect![[r#"
             root:x:0:root
             wheel:x:999:normalo
-            normalo:x:1000:normalo
+            mutable:x:1000:
+            normalo:x:1001:normalo
         "#]];
         expected_group.assert_eq(&group_db.to_buffer());
 
         let expected_passwd = expect![[r#"
             root:x:0:0:::/run/current-system/sw/bin/nologin
-            normalo:x:1000:1000::/home/normalo:/bin/bash
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+            normalo:x:1001:1001::/home/normalo:/bin/bash
         "#]];
         expected_passwd.assert_eq(&passwd_db.to_buffer());
 
         let expected_shadow = expect![[r#"
             root:!*:1::::::
+            mutable:!*:1::::::
             normalo:$y$j9T$BOO.gstYxWh8Lw.njfytQ/$K4sN06nBh0qFGegFS0hn5YkEOzzrr7woGHlSiUuCqS4:1::::::
         "#]];
         expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
 
         // GEN 1
 
-        update_users_and_groups(&gen1()?, &mut group_db, &mut passwd_db, &mut shadow_db);
+        update_users_and_groups(
+            &gen1()?,
+            None,
+            &mut group_db,
+            &mut passwd_db,
+            &mut shadow_db,
+        );
 
         let expected_group = expect![[r#"
             root:x:0:root
             initial:x:998:initial
             wheel:x:999:initial,normalo
-            normalo:x:1000:normalo
+            mutable:x:1000:mutable
+            normalo:x:1001:normalo
         "#]];
         expected_group.assert_eq(&group_db.to_buffer());
 
         let expected_passwd = expect![[r#"
             root:x:0:0:::/run/current-system/sw/bin/nologin
             initial:x:999:999:::/run/current-system/sw/bin/nologin
-            normalo:x:1000:1000::/home/normalo:/bin/zsh
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+            normalo:x:1001:1001::/home/normalo:/bin/zsh
         "#]];
         expected_passwd.assert_eq(&passwd_db.to_buffer());
 
         let expected_shadow = expect![[r#"
             root:!*:1::::::
             initial:$y$j9T$2e5ARUyMfmJ0nW9ZMPFg50$EGgRGQBqq0r/fxRlIRXL86K61o/ESEsIdVZYkyQvyN2:1::::::
+            mutable:$y$j9T$JvMN.S5D/7iVsSOh.vK1S1$rWn2Uie/c85gD.gJQZCDHOok6SH.Eg.BR3o6zPIDPM.:1::::::
             normalo:$y$j9T$BOO.gstYxWh8Lw.njfytQ/$K4sN06nBh0qFGegFS0hn5YkEOzzrr7woGHlSiUuCqS4:1::::::
         "#]];
         expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
 
         // GEN 2
 
-        update_users_and_groups(&gen2()?, &mut group_db, &mut passwd_db, &mut shadow_db);
+        update_users_and_groups(
+            &gen2()?,
+            None,
+            &mut group_db,
+            &mut passwd_db,
+            &mut shadow_db,
+        );
 
         let expected_group = expect![[r#"
             root:x:0:root
             initial:x:998:
             wheel:x:999:
-            normalo:x:1000:normalo
+            mutable:x:1000:
+            normalo:x:1001:normalo
         "#]];
         expected_group.assert_eq(&group_db.to_buffer());
 
         let expected_passwd = expect![[r#"
             root:x:0:0::/root:/run/current-system/sw/bin/nologin
             initial:x:999:999:::/run/current-system/sw/bin/nologin
-            normalo:x:1000:1000:I'm normal I swear:/home/normalo:/bin/zsh
+            mutable:x:1000:1000:I was created imperatively:/home/mutable:/bin/bash
+            normalo:x:1001:1001:I'm normal I swear:/home/normalo:/bin/zsh
         "#]];
         expected_passwd.assert_eq(&passwd_db.to_buffer());
 
         let expected_shadow = expect![[r#"
             root:!*:1::::::
             initial:!*:1::::::
+            mutable:!*:1::::::
             normalo:$y$j9T$CZSAJTLCfrBvcCgvOTY4W1$G7uzyX3O6K.DR8KJLL/oL.8EREPSRTIjBn76SpvcH4A:1::::::
         "#]];
         expected_shadow.assert_eq(&shadow_db.to_buffer_sorted(&passwd_db));
