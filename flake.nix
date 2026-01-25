@@ -29,7 +29,6 @@
 
   outputs =
     inputs@{
-      self,
       flake-parts,
       systems,
       ...
@@ -42,9 +41,7 @@
       perSystem =
         {
           config,
-          system,
           pkgs,
-          lib,
           ...
         }:
         {
@@ -54,7 +51,7 @@
 
           checks =
             let
-              overlayedPkgs = pkgs.extend (final: prev: { inherit (config.packages) userborn; });
+              overlayedPkgs = pkgs.extend (_final: _prev: { inherit (config.packages) userborn; });
             in
             {
               clippy = config.packages.userborn.overrideAttrs (
@@ -76,7 +73,7 @@
                 userborn-mutable-users
                 userborn-mutable-etc
                 userborn-immutable-users
-                # userborn-immutable-etc # currently broken on master
+                userborn-immutable-etc
                 ;
             };
 
@@ -85,7 +82,8 @@
 
             settings = {
               hooks = {
-                nixfmt-rfc-style.enable = true;
+                nixfmt.enable = true;
+                deadnix.enable = true;
                 statix.enable = true;
               };
             };
@@ -93,12 +91,12 @@
 
           devShells.default = pkgs.mkShell {
             shellHook = ''
-              ${config.pre-commit.installationScript}
+              ${config.pre-commit.shellHook}
             '';
 
             packages = [
               pkgs.niv
-              pkgs.nixfmt-rfc-style
+              pkgs.nixfmt
               pkgs.clippy
               pkgs.rustfmt
               pkgs.cargo-machete
