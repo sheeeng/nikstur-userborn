@@ -5,6 +5,10 @@
 - Groups that were removed from the config are now emptied (all their users are
   removed from it). This makes the behaviour consistent with the way we treat
   users. They're never removed (to avoid GID re-use) but effectively disabled.
+- Mutable users are now fully supported. Previously, Userborn would disable
+  all users and drain all groups that were not in it's current config. Now, if
+  mutable users are enabled via `USERBORN_MUTABLE_USERS`, only users/groups
+  that were in the previous Userborn config are disabled/drained.
 
 ## 0.4.0
 

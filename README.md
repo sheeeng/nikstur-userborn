@@ -56,6 +56,29 @@ re-use is best illustrated by an example. Imagine the following scenario:
 - Userborn will discard entries in the shadow database that are not present in
   the passwd database. It will warn about these inconsistent entries.
 
+## Mutable Users
+
+Userborn support mutable users. This feature allows you to manage some users
+via Userborn and manage other users imperatively with tools like `useradd`,
+`usermod`, etc.
+
+When the mutable user feature is enabled by setting `USERBORN_MUTABLE_USERS =
+true`, only users and groups that were already in the previous config are
+disabled and drained. All other users/groups remain enabled.
+
+Userborn will still "re-take" control of users/groups that were imperatively created
+and later added to the Userborn config. For example:
+
+- You imperatively create a user with `useradd` called `normalo`.
+- Userborn will keep it enabled as long as the user is not in the Userborn
+  config.
+- You now add a config for the user `normalo` to your Userborn config setting a
+  different password.
+- On the next invocation, Userborn will update the password of the user
+  `normalo` and take full ownership of the entire user.
+- When you now remove the user from the config, Userborn will disable the user
+  on the next invocation.
+
 ## Configuration
 
 You can configure Userborn during runtime via the provided config file and via
@@ -67,6 +90,12 @@ environment variables.
   your system. This path is used when the user config doesn't specify a
   `shell`. If this environment variable is set, its value overrides
   `USERBORN_NO_LOGIN_DEFAULT_PATH`.
+- `USERBORN_MUTABLE_USERS`: Set this to the string `true` if you want to enable
+  mutable users.
+- `USERBORN_PREVIOUS_CONFIG`: Set this to the path of the previous Userborn
+  config. This is necessary when you enable mutable users. Otherwise, this
+  variable is ignored. It is your responsibility to update this on each change
+  of the Userborn config.
 
 ## Building Userborn
 

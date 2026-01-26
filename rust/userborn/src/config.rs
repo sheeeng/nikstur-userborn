@@ -1,10 +1,13 @@
-use std::collections::BTreeSet;
-use std::{fs::File, io::Read, path::Path};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fs,
+    path::Path,
+};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     /// Whether the user is a "normal" or a "system" user
@@ -28,7 +31,7 @@ pub struct User {
     pub password: Password,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Password {
     pub password: Option<String>,
@@ -38,7 +41,7 @@ pub struct Password {
     pub initial_hashed_password: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Group {
     /// Whether the group is a "normal" or a "system" group
     #[serde(default)]
@@ -52,7 +55,7 @@ pub struct Group {
     pub members: BTreeSet<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     #[serde(default)]
     pub users: Vec<User>,
@@ -62,12 +65,17 @@ pub struct Config {
 
 impl Config {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let file = File::open(path)?;
-        Self::from_reader(file)
+        let contents = fs::read(&path)
+            .with_context(|| format!("Failed to read {}", path.as_ref().display()))?;
+        serde_json::from_slice(&contents).context("Failed to parse config")
     }
 
-    fn from_reader(reader: impl Read) -> Result<Self> {
-        serde_json::from_reader(reader).context("Failed to parse config")
+    pub fn user_names(&self) -> HashSet<String> {
+        self.users.iter().map(|u| u.name.clone()).collect()
+    }
+
+    pub fn group_names(&self) -> HashSet<String> {
+        self.groups.iter().map(|g| g.name.clone()).collect()
     }
 }
 
