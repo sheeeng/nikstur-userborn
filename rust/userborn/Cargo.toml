@@ -4,15 +4,15 @@ version = "0.4.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.99"
-log = "0.4.28"
-serde = { version = "1.0.223", features = [ "derive" ] }
-serde_json = "1.0.145"
+anyhow = "1.0.100"
+log = "0.4.29"
+serde = { version = "1.0.228", features = [ "derive" ] }
+serde_json = "1.0.149"
 env_logger = { version = "0.11.8", default-features = false }
-xcrypt = "0.3.1"
+xcrypt = "0.3.2"
 
 [dev-dependencies]
-indoc = "2.0.6"
+indoc = "2.0.7"
 expect-test = "1.5.1"
 
 [profile.release]
