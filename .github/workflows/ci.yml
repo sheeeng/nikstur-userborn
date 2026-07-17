@@ -18,6 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: samueldr/lix-gha-installer-action@v2026-06-15
+      - uses: Mic92/hestia@v2
+        with:
+          upstream-cache-filter: true
       - name: Run nix-eval-jobs
         id: nix-eval-jobs
         run: |
@@ -37,6 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: samueldr/lix-gha-installer-action@v2026-06-15
+      - uses: Mic92/hestia@v2
+        with:
+          upstream-cache-filter: true
       - name: Build ${{ matrix.derivation.attr }}
         run: nix build .\#checks.x86_64-linux.${{ matrix.derivation.attr }}
         if: ${{ ! matrix.derivation.isCached }}
