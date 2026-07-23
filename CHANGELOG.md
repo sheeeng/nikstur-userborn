@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Statically declared UIDs/GIDs in the config are now reserved before any
+  dynamic allocation happens, so a dynamically allocated ID can no longer
+  collide with a static one that appears later in the config (#59).
+
 ## 1.0.0
 
 - Removed the ability to configure the path to the `nologin` binary during

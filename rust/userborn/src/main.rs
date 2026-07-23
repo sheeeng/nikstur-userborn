@@ -253,6 +253,8 @@ fn update_users_and_groups(
     passwd_db: &mut Passwd,
     shadow_db: &mut Shadow,
 ) {
+    let reserved = ReservedIds::from_config(config);
+
     let mut groups_in_config: BTreeSet<&str> = BTreeSet::new();
 
     for group_config in &config.groups {
@@ -288,7 +290,7 @@ fn update_users_and_groups(
                 group_config.members.clone()
             };
             existing_entry.update(desired_members);
-        } else if let Err(e) = create_group(group_config, group_db) {
+        } else if let Err(e) = create_group(group_config, group_db, &reserved.gids) {
             log::error!("Failed to create group {}: {e:#}", group_config.name);
         }
     }
@@ -306,7 +308,7 @@ fn update_users_and_groups(
             if let Err(e) = update_user(existing_entry, user_config, group_db, shadow_db) {
                 log::error!("Failed to update user {}: {e:#}", user_config.name);
             }
-        } else if let Err(e) = create_user(user_config, group_db, passwd_db, shadow_db) {
+        } else if let Err(e) = create_user(user_config, group_db, passwd_db, shadow_db, &reserved) {
             log::error!("Failed to create user {}: {e:#}", user_config.name);
         }
     }
@@ -368,13 +370,48 @@ fn update_users_and_groups(
     }
 }
 
+/// Statically declared UIDs and GIDs from the config.
+///
+/// These must never be handed out by dynamic allocation, otherwise creating the
+/// statically configured user/group would fail depending on config order.
+struct ReservedIds {
+    uids: BTreeSet<u32>,
+    gids: BTreeSet<u32>,
+}
+
+impl ReservedIds {
+    /// A user without an explicit group re-uses its UID as GID for its implicit primary group,
+    /// so such static UIDs are also reserved as GIDs.
+    fn from_config(config: &Config) -> Self {
+        Self {
+            uids: config.users.iter().filter_map(|u| u.uid).collect(),
+            gids: config
+                .groups
+                .iter()
+                .filter_map(|g| g.gid)
+                .chain(
+                    config
+                        .users
+                        .iter()
+                        .filter(|u| u.group.is_none())
+                        .filter_map(|u| u.uid),
+                )
+                .collect(),
+        }
+    }
+}
+
 /// Create a new group entry and add it to the database.
-fn create_group(group_config: &config::Group, group_db: &mut Group) -> Result<()> {
+fn create_group(
+    group_config: &config::Group,
+    group_db: &mut Group,
+    reserved_gids: &BTreeSet<u32>,
+) -> Result<()> {
     let gid = if let Some(gid) = group_config.gid {
         gid
     } else {
         group_db
-            .allocate_gid(group_config.is_normal)
+            .allocate_gid(group_config.is_normal, reserved_gids)
             .context("Failed to allocate new GID")?
     };
 
@@ -399,6 +436,7 @@ fn create_user(
     group_db: &mut Group,
     passwd_db: &mut Passwd,
     shadow_db: &mut Shadow,
+    reserved: &ReservedIds,
 ) -> Result<()> {
     log::debug!("Creating new passwd entry for {}...", user_config.name);
 
@@ -406,7 +444,7 @@ fn create_user(
         uid
     } else {
         passwd_db
-            .allocate_uid(user_config.is_normal)
+            .allocate_uid(user_config.is_normal, &reserved.uids)
             .context("Failed to allocate new UID")?
     };
 
@@ -429,7 +467,7 @@ fn create_user(
             members: BTreeSet::from([user_config.name.clone()]),
         };
 
-        create_group(&group_config, group_db)
+        create_group(&group_config, group_db, &reserved.gids)
             .with_context(|| format!("Failed to create group for user {}", user_config.name))?;
         uid
     };
@@ -656,7 +694,7 @@ mod tests {
         passwd_db: &mut Passwd,
         shadow_db: &mut Shadow,
     ) -> Result<()> {
-        let uid = passwd_db.allocate_uid(true)?;
+        let uid = passwd_db.allocate_uid(true, &BTreeSet::new())?;
         passwd_db.insert(&passwd::Entry::new(
             name.into(),
             uid,
@@ -671,9 +709,41 @@ mod tests {
         ))?;
         group_db.insert(&group::Entry::new(
             name.into(),
-            group_db.allocate_gid(true)?,
+            group_db.allocate_gid(true, &BTreeSet::new())?,
             BTreeSet::from([name.into()]),
         ))?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn static_ids_reserved_before_dynamic_allocation() -> Result<()> {
+        // Regression test for https://github.com/nikstur/userborn/issues/59
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "groups": [],
+            "users": [
+                { "name": "aaa", "isNormal": true },
+                { "name": "bbb", "isNormal": true, "uid": 1000 },
+            ],
+        }))?;
+
+        let mut group_db = Group::default();
+        let mut passwd_db = Passwd::default();
+        let mut shadow_db = Shadow::default();
+
+        update_users_and_groups(&config, None, &mut group_db, &mut passwd_db, &mut shadow_db);
+
+        let expected_passwd = expect![[r#"
+            bbb:x:1000:1000:::/run/current-system/sw/bin/nologin
+            aaa:x:1001:1001:::/run/current-system/sw/bin/nologin
+        "#]];
+        expected_passwd.assert_eq(&passwd_db.to_buffer());
+
+        let expected_group = expect![[r#"
+            bbb:x:1000:bbb
+            aaa:x:1001:aaa
+        "#]];
+        expected_group.assert_eq(&group_db.to_buffer());
 
         Ok(())
     }
