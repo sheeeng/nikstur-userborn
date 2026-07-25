@@ -138,8 +138,9 @@ impl Group {
     /// Allocate a new (i.e. unused) GID.
     ///
     /// Returns `Err` if it cannot allocate a new GID because all in the range are already used.
-    pub fn allocate_gid(&self, is_normal: bool) -> Result<u32> {
-        let allocated_gids = self.entries.keys().copied().collect::<BTreeSet<u32>>();
+    pub fn allocate_gid(&self, is_normal: bool, reserved_gids: &BTreeSet<u32>) -> Result<u32> {
+        let mut allocated_gids = self.entries.keys().copied().collect::<BTreeSet<u32>>();
+        allocated_gids.extend(reserved_gids);
         id::allocate(&allocated_gids, is_normal)
     }
 

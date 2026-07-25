@@ -178,8 +178,9 @@ impl Passwd {
     /// Allocate a new (i.e. unused) UID.
     ///
     /// Returns `Err` if it cannot allocate a new UID because all in the range are already used.
-    pub fn allocate_uid(&self, is_normal: bool) -> Result<u32> {
-        let allocated_uids = self.entries.keys().copied().collect::<BTreeSet<u32>>();
+    pub fn allocate_uid(&self, is_normal: bool, reserved_uids: &BTreeSet<u32>) -> Result<u32> {
+        let mut allocated_uids = self.entries.keys().copied().collect::<BTreeSet<u32>>();
+        allocated_uids.extend(reserved_uids);
         id::allocate(&allocated_uids, is_normal)
     }
 
