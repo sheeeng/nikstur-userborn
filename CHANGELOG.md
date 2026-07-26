@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
-- Statically declared UIDs/GIDs in the config are now reserved before any
-  dynamic allocation happens, so a dynamically allocated ID can no longer
-  collide with a static one that appears later in the config (#59).
+- Fixed an issue where a dynamically allocated ID could collide with a
+  statically declared one that appears later in the config (#59). Statically
+  declared UIDs/GIDs in the config are now reserved before any dynamic
+  allocation happens.
+
 
 ## 1.0.0
 
