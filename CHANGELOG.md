@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Added a JSON schema that specifies the configuration format.
+
 ## 1.0.1
 
 - Fixed an issue where a dynamically allocated ID could collide with a
