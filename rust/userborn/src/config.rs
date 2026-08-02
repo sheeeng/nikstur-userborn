@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct User {
     /// Whether the user is a "normal" or a "system" user
     #[serde(default)]
@@ -48,6 +49,7 @@ impl User {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct Password {
     pub password: Option<String>,
     pub hashed_password: Option<String>,
@@ -57,6 +59,7 @@ pub struct Password {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct Group {
     /// Whether the group is a "normal" or a "system" group
     #[serde(default)]
@@ -71,6 +74,7 @@ pub struct Group {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     #[serde(default)]
@@ -81,6 +85,7 @@ pub struct Config {
 
 /// A half-open subordinate id interval `[start, start + count)`.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct SubIdRange {
     /// First id in the range.
     pub start: u64,
@@ -95,10 +100,12 @@ impl Config {
         serde_json::from_slice(&contents).context("Failed to parse config")
     }
 
+    #[must_use]
     pub fn user_names(&self) -> HashSet<String> {
         self.users.iter().map(|u| u.name.clone()).collect()
     }
 
+    #[must_use]
     pub fn group_names(&self) -> HashSet<String> {
         self.groups.iter().map(|g| g.name.clone()).collect()
     }

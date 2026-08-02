@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
+    },
+    "users": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/User"
+      }
+    }
+  },
+  "$defs": {
+    "Group": {
+      "type": "object",
+      "properties": {
+        "gid": {
+          "description": "The GID of the users primary group",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "is_normal": {
+          "description": "Whether the group is a \"normal\" or a \"system\" group",
+          "type": "boolean",
+          "default": false
+        },
+        "members": {
+          "description": "The members of this group",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "name": {
+          "description": "The name of the group",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "SubIdRange": {
+      "description": "A half-open subordinate id interval `[start, start + count)`.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Number of consecutive ids in the range.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "start": {
+          "description": "First id in the range.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "count"
+      ]
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "autoSubIdRange": {
+          "description": "Whether to automatically allocate a subordinate UID/GID range for this user.",
+          "type": "boolean",
+          "default": false
+        },
+        "description": {
+          "description": "The description of the user",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "The primary group of the user.\n\nThis can either be the name of the user or the GID.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hashedPassword": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hashedPasswordFile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "home": {
+          "description": "The home directory of the user",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialHashedPassword": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialPassword": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "isNormal": {
+          "description": "Whether the user is a \"normal\" or a \"system\" user",
+          "type": "boolean",
+          "default": false
+        },
+        "name": {
+          "description": "The name of the user",
+          "type": "string"
+        },
+        "password": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "description": "The shell of the user",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subGidRanges": {
+          "description": "Explicit subordinate GID ranges for this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubIdRange"
+          }
+        },
+        "subUidRanges": {
+          "description": "Explicit subordinate UID ranges for this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubIdRange"
+          }
+        },
+        "uid": {
+          "description": "The UID of the user",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  }
+}

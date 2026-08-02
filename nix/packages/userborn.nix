@@ -2,6 +2,7 @@
   lib,
   rustPlatform,
   libxcrypt,
+  withJsonschema ? true,
 }:
 
 let
@@ -17,6 +18,13 @@ rustPlatform.buildRustPackage {
     ".lock"
   ];
 
+  outputs = [
+    "out"
+  ]
+  ++ lib.optionals withJsonschema [
+    "dev"
+  ];
+
   cargoLock = {
     lockFile = ../../rust/userborn/Cargo.lock;
   };
@@ -28,6 +36,14 @@ rustPlatform.buildRustPackage {
   buildInputs = [
     libxcrypt
   ];
+
+  buildFeatures = lib.optionals withJsonschema [ "jsonschema" ];
+
+  postInstall = lib.optionalString withJsonschema ''
+    mkdir -p $dev
+    $out/bin/jsonschema > $dev/userborn.schema.json
+    rm $out/bin/jsonschema
+  '';
 
   stripAllList = [ "bin" ];
 

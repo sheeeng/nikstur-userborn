@@ -43,23 +43,30 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          overlayedPkgs = pkgs.extend (_final: _prev: { inherit (self.packages.${system}) userborn; });
+          userborn = self.packages.${system}.userborn;
+          overlayedPkgs = pkgs.extend (_final: _prev: { inherit userborn; });
         in
         {
-          clippy = self.packages.${system}.userborn.overrideAttrs (
+          clippy = userborn.overrideAttrs (
             _: previousAttrs: {
               pname = previousAttrs.pname + "-clippy";
               nativeCheckInputs = (previousAttrs.nativeCheckInputs or [ ]) ++ [ pkgs.clippy ];
               checkPhase = "cargo clippy";
             }
           );
-          rustfmt = self.packages.${system}.userborn.overrideAttrs (
+          rustfmt = userborn.overrideAttrs (
             _: previousAttrs: {
               pname = previousAttrs.pname + "-rustfmt";
               nativeCheckInputs = (previousAttrs.nativeCheckInputs or [ ]) ++ [ pkgs.rustfmt ];
               checkPhase = "cargo fmt --check";
             }
           );
+          # Check whether the vendored schema is up-to-date with the Rust
+          # sources.
+          vendored-schema = pkgs.runCommand "vendored-schema" { } ''
+            ${pkgs.diffutils}/bin/diff --color ${./userborn.schema.json} ${userborn.dev}/userborn.schema.json
+            touch $out
+          '';
           pre-commit = inputs.pre-commit.lib.${system}.run {
             src = ./.;
             hooks = {
