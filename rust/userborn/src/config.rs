@@ -7,8 +7,6 @@ use std::{
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-use crate::subid;
-
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
@@ -34,10 +32,10 @@ pub struct User {
     pub auto_sub_id_range: bool,
     /// Explicit subordinate UID ranges for this user.
     #[serde(default)]
-    pub sub_uid_ranges: Vec<subid::Range>,
+    pub sub_uid_ranges: Vec<SubIdRange>,
     /// Explicit subordinate GID ranges for this user.
     #[serde(default)]
-    pub sub_gid_ranges: Vec<subid::Range>,
+    pub sub_gid_ranges: Vec<SubIdRange>,
     #[serde(flatten)]
     pub password: Password,
 }
@@ -79,6 +77,15 @@ pub struct Config {
     pub users: Vec<User>,
     #[serde(default)]
     pub groups: Vec<Group>,
+}
+
+/// A half-open subordinate id interval `[start, start + count)`.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SubIdRange {
+    /// First id in the range.
+    pub start: u64,
+    /// Number of consecutive ids in the range.
+    pub count: u64,
 }
 
 impl Config {

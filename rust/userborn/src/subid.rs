@@ -1,9 +1,8 @@
 use std::{collections::BTreeMap, fmt::Write as _};
 
 use anyhow::{Result, bail};
-use serde::Deserialize;
 
-use crate::FromBuffer;
+use crate::{FromBuffer, config::SubIdRange};
 
 /// 31-bit ceiling on the subordinate id space.
 ///
@@ -21,23 +20,14 @@ pub const AUTO_BASE: u64 = 100_000;
 /// Matches shadow's `SUB_UID_COUNT` default in `login.defs`.
 pub const AUTO_COUNT: u64 = 65_536;
 
-/// A half-open subordinate id interval `[start, start + count)`.
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Range {
-    /// First id in the range.
-    pub start: u64,
-    /// Number of consecutive ids in the range.
-    pub count: u64,
-}
-
-impl Range {
+impl SubIdRange {
     fn end(self) -> u64 {
         self.start.saturating_add(self.count)
     }
 
     /// Two half-open intervals overlap iff each one's start lies strictly before the other's
     /// end.
-    fn overlaps(self, other: Range) -> bool {
+    fn overlaps(self, other: SubIdRange) -> bool {
         self.start < other.end() && other.start < self.end()
     }
 }
@@ -47,16 +37,16 @@ impl Range {
 pub struct EntryRef<'a> {
     /// Owner name, or a numeric uid rendered as a string (both valid per `subuid(5)`).
     pub name: &'a str,
-    pub range: Range,
+    pub range: SubIdRange,
 }
 
-fn parse_line(line: &str) -> Option<(&str, Range)> {
+fn parse_line(line: &str) -> Option<(&str, SubIdRange)> {
     if line.starts_with('#') {
         return None;
     }
     let mut fields = line.splitn(3, ':');
     let name = fields.next()?;
-    let range = Range {
+    let range = SubIdRange {
         start: fields.next()?.parse().ok()?,
         count: fields.next()?.parse().ok()?,
     };
@@ -77,7 +67,7 @@ impl SubIds {
     /// --add-subgids`. Looking in both lets us restore a range that survived in only one
     /// file instead of allocating a fresh one and breaking existing containers. If both are
     /// present but disagree we warn and prefer `subuid`.
-    pub fn auto_range(&self, name: &str) -> Option<Range> {
+    pub fn auto_range(&self, name: &str) -> Option<SubIdRange> {
         let u = self.uid.auto_range(name);
         let g = self.gid.auto_range(name);
         if u.is_some() && g.is_some() && u != g {
@@ -100,7 +90,7 @@ impl SubIds {
 /// Userborn treats UIDs and GIDs.
 #[derive(Default)]
 pub struct SubId {
-    entries: BTreeMap<String, Vec<Range>>,
+    entries: BTreeMap<String, Vec<SubIdRange>>,
 }
 
 impl SubId {
@@ -127,12 +117,12 @@ impl SubId {
         out
     }
 
-    pub fn ranges(&self, name: &str) -> &[Range] {
+    pub fn ranges(&self, name: &str) -> &[SubIdRange] {
         self.entries.get(name).map_or(&[], Vec::as_slice)
     }
 
     /// Replace all ranges for `name`.
-    pub fn set(&mut self, name: &str, ranges: Vec<Range>) {
+    pub fn set(&mut self, name: &str, ranges: Vec<SubIdRange>) {
         if ranges.is_empty() {
             self.entries.remove(name);
         } else {
@@ -141,7 +131,7 @@ impl SubId {
     }
 
     /// Find an existing auto-style range (one with exactly [`AUTO_COUNT`] width) for `name`.
-    pub fn auto_range(&self, name: &str) -> Option<Range> {
+    pub fn auto_range(&self, name: &str) -> Option<SubIdRange> {
         self.ranges(name)
             .iter()
             .find(|r| r.count == AUTO_COUNT)
@@ -158,7 +148,7 @@ impl SubId {
 
 impl FromBuffer for SubId {
     fn from_buffer(s: &str) -> Self {
-        let mut entries: BTreeMap<String, Vec<Range>> = BTreeMap::new();
+        let mut entries: BTreeMap<String, Vec<SubIdRange>> = BTreeMap::new();
         for line in s.lines() {
             let line = line.trim();
             if line.is_empty() {
@@ -177,7 +167,7 @@ impl FromBuffer for SubId {
 /// Allocate a `count`-wide range at or above `base` that does not overlap any of `occupied`.
 ///
 /// `occupied` must be sorted by `start`. Duplicate entries are harmless.
-pub fn allocate(base: u64, count: u64, occupied: &[Range]) -> Result<Range> {
+pub fn allocate(base: u64, count: u64, occupied: &[SubIdRange]) -> Result<SubIdRange> {
     debug_assert!(occupied.is_sorted_by_key(|r| r.start));
 
     let mut start = base;
@@ -186,19 +176,19 @@ pub fn allocate(base: u64, count: u64, occupied: &[Range]) -> Result<Range> {
             // This and all later entries start after our probe ends.
             break;
         }
-        if (Range { start, count }).overlaps(*r) {
+        if (SubIdRange { start, count }).overlaps(*r) {
             start = r.end();
         }
     }
     if start.checked_add(count).is_none_or(|end| end > SUBID_MAX) {
         bail!("No free {count}-wide subordinate id range available above {base}");
     }
-    Ok(Range { start, count })
+    Ok(SubIdRange { start, count })
 }
 
 /// Returns the first pair of ranges that overlap across distinct owners, if any.
 ///
-/// Ranges belonging to the same owner are allowed to overlap.
+/// `SubIdRanges` belonging to the same owner are allowed to overlap.
 pub fn find_overlap<'a>(entries: &[EntryRef<'a>]) -> Option<(EntryRef<'a>, EntryRef<'a>)> {
     for (i, a) in entries.iter().enumerate() {
         for b in &entries[i + 1..] {
@@ -217,8 +207,8 @@ mod tests {
     use expect_test::expect;
     use indoc::indoc;
 
-    fn range(start: u64, count: u64) -> Range {
-        Range { start, count }
+    fn range(start: u64, count: u64) -> SubIdRange {
+        SubIdRange { start, count }
     }
 
     fn entry(name: &str, start: u64, count: u64) -> EntryRef<'_> {
@@ -237,7 +227,7 @@ mod tests {
         let db = SubId::from_buffer(buffer);
         assert_eq!(
             db.ranges("alice"),
-            &[Range {
+            &[SubIdRange {
                 start: 100_000,
                 count: 65536
             }]
