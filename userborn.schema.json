@@ -1,27 +1,41 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Config",
+  "title": "Userborn Configuration",
+  "description": "Complete configuration for a generation of users and groups.",
   "type": "object",
   "properties": {
-    "groups": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/Group"
-      }
-    },
     "users": {
+      "description": "Users to manage.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/User"
       }
+    },
+    "groups": {
+      "description": "Groups to manage.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
     }
   },
   "$defs": {
-    "Group": {
+    "User": {
+      "title": "User",
+      "description": "The configuration for a single user.",
       "type": "object",
       "properties": {
-        "gid": {
-          "description": "The GID of the users primary group",
+        "isNormal": {
+          "description": "Whether the user is a \"normal\" or a \"system\" user.",
+          "type": "boolean",
+          "default": false
+        },
+        "name": {
+          "description": "Name of the user.",
+          "type": "string"
+        },
+        "uid": {
+          "description": "UID of the user.",
           "type": [
             "integer",
             "null"
@@ -29,23 +43,87 @@
           "format": "uint32",
           "minimum": 0
         },
-        "is_normal": {
-          "description": "Whether the group is a \"normal\" or a \"system\" group",
+        "group": {
+          "description": "The primary group of the user.\n\nThis can either be the name of the user or the GID.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "Description (GECOS) of the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "home": {
+          "description": "Home directory of the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "description": "Shell of the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "autoSubIdRange": {
+          "description": "Whether to automatically allocate a subordinate UID/GID range for this user.",
           "type": "boolean",
           "default": false
         },
-        "members": {
-          "description": "The members of this group",
+        "subUidRanges": {
+          "description": "Explicit subordinate UID ranges for this user.",
           "type": "array",
-          "default": [],
           "items": {
-            "type": "string"
-          },
-          "uniqueItems": true
+            "$ref": "#/$defs/SubIdRange"
+          }
         },
-        "name": {
-          "description": "The name of the group",
-          "type": "string"
+        "subGidRanges": {
+          "description": "Explicit subordinate GID ranges for this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubIdRange"
+          }
+        },
+        "password": {
+          "description": "Plaintext password.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hashedPassword": {
+          "description": "Hashed password that was created with ``crypt()`` of libxcrypt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hashedPasswordFile": {
+          "description": "Path to a file containing a hashed password created with ``crypt()`` of libxcrypt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialPassword": {
+          "description": "Initial plaintext password for the user that won't be applied if a password is already set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialHashedPassword": {
+          "description": "Same as ``initial_password`` but with a hashed password.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -53,17 +131,17 @@
       ]
     },
     "SubIdRange": {
-      "description": "A half-open subordinate id interval `[start, start + count)`.",
+      "description": "Range of subordiate IDs to create.",
       "type": "object",
       "properties": {
-        "count": {
-          "description": "Number of consecutive ids in the range.",
+        "start": {
+          "description": "First ID in the range.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
         },
-        "start": {
-          "description": "First id in the range.",
+        "count": {
+          "description": "Number of consecutive IDs in the range.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -74,103 +152,37 @@
         "count"
       ]
     },
-    "User": {
+    "Group": {
+      "title": "Group",
+      "description": "The configuration for a single group.",
       "type": "object",
       "properties": {
-        "autoSubIdRange": {
-          "description": "Whether to automatically allocate a subordinate UID/GID range for this user.",
-          "type": "boolean",
-          "default": false
-        },
-        "description": {
-          "description": "The description of the user",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "group": {
-          "description": "The primary group of the user.\n\nThis can either be the name of the user or the GID.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "hashedPassword": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "hashedPasswordFile": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "home": {
-          "description": "The home directory of the user",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "initialHashedPassword": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "initialPassword": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "isNormal": {
-          "description": "Whether the user is a \"normal\" or a \"system\" user",
+          "description": "Whether the group is a \"normal\" or a \"system\" group.",
           "type": "boolean",
           "default": false
         },
         "name": {
-          "description": "The name of the user",
+          "description": "Name of the group.",
           "type": "string"
         },
-        "password": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "shell": {
-          "description": "The shell of the user",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "subGidRanges": {
-          "description": "Explicit subordinate GID ranges for this user.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SubIdRange"
-          }
-        },
-        "subUidRanges": {
-          "description": "Explicit subordinate UID ranges for this user.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SubIdRange"
-          }
-        },
-        "uid": {
-          "description": "The UID of the user",
+        "gid": {
+          "description": "GID of the user's primary group.",
           "type": [
             "integer",
             "null"
           ],
           "format": "uint32",
           "minimum": 0
+        },
+        "members": {
+          "description": "Members of this group.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       },
       "required": [

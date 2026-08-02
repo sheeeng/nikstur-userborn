@@ -7,26 +7,28 @@ use std::{
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+/// # User
+/// The configuration for a single user.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct User {
-    /// Whether the user is a "normal" or a "system" user
+    /// Whether the user is a "normal" or a "system" user.
     #[serde(default)]
     pub is_normal: bool,
-    /// The name of the user
+    /// Name of the user.
     pub name: String,
-    /// The UID of the user
+    /// UID of the user.
     pub uid: Option<u32>,
     /// The primary group of the user.
     ///
     /// This can either be the name of the user or the GID.
     pub group: Option<String>,
-    /// The description of the user
+    /// Description (GECOS) of the user.
     pub description: Option<String>,
-    /// The home directory of the user
+    /// Home directory of the user.
     pub home: Option<String>,
-    /// The shell of the user
+    /// Shell of the user.
     pub shell: Option<String>,
     /// Whether to automatically allocate a subordinate UID/GID range for this user.
     #[serde(default)]
@@ -51,45 +53,57 @@ impl User {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct Password {
+    /// Plaintext password.
     pub password: Option<String>,
+    /// Hashed password that was created with ``crypt()`` of libxcrypt.
     pub hashed_password: Option<String>,
+    /// Path to a file containing a hashed password created with ``crypt()`` of libxcrypt.
     pub hashed_password_file: Option<String>,
+    /// Initial plaintext password for the user that won't be applied if a password is already set.
     pub initial_password: Option<String>,
+    /// Same as ``initial_password`` but with a hashed password.
     pub initial_hashed_password: Option<String>,
 }
 
+/// # Group
+/// The configuration for a single group.
 #[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct Group {
-    /// Whether the group is a "normal" or a "system" group
+    /// Whether the group is a "normal" or a "system" group.
     #[serde(default)]
     pub is_normal: bool,
-    /// The name of the group
+    /// Name of the group.
     pub name: String,
-    /// The GID of the users primary group
+    /// GID of the user's primary group.
     pub gid: Option<u32>,
-    /// The members of this group
+    /// Members of this group.
     #[serde(default)]
     pub members: BTreeSet<String>,
 }
 
+/// # Userborn Configuration
+/// Complete configuration for a generation of users and groups.
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
+    /// Users to manage.
     #[serde(default)]
     pub users: Vec<User>,
+    /// Groups to manage.
     #[serde(default)]
     pub groups: Vec<Group>,
 }
 
-/// A half-open subordinate id interval `[start, start + count)`.
+/// Range of subordiate IDs to create.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct SubIdRange {
-    /// First id in the range.
+    /// First ID in the range.
     pub start: u64,
-    /// Number of consecutive ids in the range.
+    /// Number of consecutive IDs in the range.
     pub count: u64,
 }
 
