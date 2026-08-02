@@ -8,7 +8,7 @@ Declaratively bear (manage) Linux users and groups.
 - Update user (password, description (gecos), home directory,
   shell) and group (members) information.
 - Prohibit UID/GID re-use.
-- Simple JSON config format.
+- Simple JSON config format with a [JSON Schema](./userborn.schema.json).
 - Create per-user groups if no explicit primary group is provided.
 - Warn about insecure password hashing schemes.
 - Manage `/etc/subuid` and `/etc/subgid` for rootless containers.
@@ -90,6 +90,12 @@ and later added to the Userborn config. For example:
 
 You can configure Userborn during runtime via the provided config file and via
 environment variables.
+
+### Config
+
+The config file is specified in a [provided JSON
+schema](./userborn.schema.json) which you can use to see available options and
+to validate your config.
 
 ### Environment Variables
 

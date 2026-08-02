@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
 
-use crate::{FromBuffer, passwd::Passwd};
+use crate::{fs::FromBuffer, passwd::Passwd};
 
 /// A locked and invalid password.
 const PASSWORD_LOCKED_AND_INVALID: &str = "!*";

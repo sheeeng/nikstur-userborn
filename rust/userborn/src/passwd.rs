@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail};
 
-use crate::{FromBuffer, id};
+use crate::{fs::FromBuffer, id};
 
 /// Password for /etc/passwd indicating that the actual password is stored in /etc/shadow.
 const PASSWORD_IN_SHADOW: &str = "x";

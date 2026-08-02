@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Userborn Configuration",
+  "description": "Complete configuration for a generation of users and groups.",
+  "type": "object",
+  "properties": {
+    "users": {
+      "description": "Users to manage.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/User"
+      }
+    },
+    "groups": {
+      "description": "Groups to manage.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
+    }
+  },
+  "$defs": {
+    "User": {
+      "title": "User",
+      "description": "The configuration for a single user.",
+      "type": "object",
+      "properties": {
+        "isNormal": {
+          "description": "Whether the user is a \"normal\" or a \"system\" user.",
+          "type": "boolean",
+          "default": false
+        },
+        "name": {
+          "description": "Name of the user.",
+          "type": "string"
+        },
+        "uid": {
+          "description": "UID of the user.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "group": {
+          "description": "The primary group of the user.\n\nThis can either be the name of the user or the GID.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "Description (GECOS) of the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "home": {
+          "description": "Home directory of the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "description": "Shell of the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "autoSubIdRange": {
+          "description": "Whether to automatically allocate a subordinate UID/GID range for this user.",
+          "type": "boolean",
+          "default": false
+        },
+        "subUidRanges": {
+          "description": "Explicit subordinate UID ranges for this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubIdRange"
+          }
+        },
+        "subGidRanges": {
+          "description": "Explicit subordinate GID ranges for this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubIdRange"
+          }
+        },
+        "password": {
+          "description": "Plaintext password.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hashedPassword": {
+          "description": "Hashed password that was created with ``crypt()`` of libxcrypt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hashedPasswordFile": {
+          "description": "Path to a file containing a hashed password created with ``crypt()`` of libxcrypt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialPassword": {
+          "description": "Initial plaintext password for the user that won't be applied if a password is already set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialHashedPassword": {
+          "description": "Same as ``initial_password`` but with a hashed password.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "SubIdRange": {
+      "description": "Range of subordiate IDs to create.",
+      "type": "object",
+      "properties": {
+        "start": {
+          "description": "First ID in the range.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "count": {
+          "description": "Number of consecutive IDs in the range.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "count"
+      ]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "The configuration for a single group.",
+      "type": "object",
+      "properties": {
+        "isNormal": {
+          "description": "Whether the group is a \"normal\" or a \"system\" group.",
+          "type": "boolean",
+          "default": false
+        },
+        "name": {
+          "description": "Name of the group.",
+          "type": "string"
+        },
+        "gid": {
+          "description": "GID of the user's primary group.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "members": {
+          "description": "Members of this group.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  }
+}

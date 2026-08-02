@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail};
 
-use crate::{FromBuffer, id};
+use crate::{fs::FromBuffer, id};
 
 #[derive(Clone)]
 pub struct Entry {
