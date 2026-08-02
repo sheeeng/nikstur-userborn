@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::Write as _};
 
 use anyhow::{Result, bail};
 
-use crate::{FromBuffer, config::SubIdRange};
+use crate::{config::SubIdRange, fs::FromBuffer};
 
 /// 31-bit ceiling on the subordinate id space.
 ///

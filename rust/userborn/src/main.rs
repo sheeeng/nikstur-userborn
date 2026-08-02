@@ -7,36 +7,18 @@ mod password;
 mod shadow;
 mod subid;
 
-use std::{collections::BTreeSet, io::Write, path::Path, process::ExitCode};
+use std::{collections::BTreeSet, io::Write, process::ExitCode};
 
 use anyhow::{Context, Result, anyhow, bail};
 use log::{Level, LevelFilter};
 
 use config::Config;
-use fs::{Rights, atomic_write, read_to_string};
+use fs::{atomic_write, read_or_default};
 use group::Group;
 use passwd::Passwd;
 use password::HashedPassword;
 use shadow::Shadow;
 use subid::{SubId, SubIds};
-
-trait FromBuffer {
-    fn from_buffer(buf: &str) -> Self;
-}
-
-/// Read a file and its rights.
-///
-/// If the file doesn't exist, return the default representation of T alongside the rights with a
-/// provided default mode.
-fn read_or_default<T>(path: impl AsRef<Path>, default_mode: u32) -> (T, Rights)
-where
-    T: FromBuffer + Default,
-{
-    match read_to_string(path) {
-        Ok((buf, rights)) => (T::from_buffer(&buf), rights),
-        Err(_) => (T::default(), Rights::from_mode(default_mode)),
-    }
-}
 
 /// Fallback path to the nologin binary.
 ///

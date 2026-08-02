@@ -26,6 +26,24 @@ impl Rights {
     }
 }
 
+pub trait FromBuffer {
+    fn from_buffer(buf: &str) -> Self;
+}
+
+/// Read a file and its rights.
+///
+/// If the file doesn't exist, return the default representation of T alongside the rights with a
+/// provided default mode.
+pub fn read_or_default<T>(path: impl AsRef<Path>, default_mode: u32) -> (T, Rights)
+where
+    T: FromBuffer + Default,
+{
+    match read_to_string(path) {
+        Ok((buf, rights)) => (T::from_buffer(&buf), rights),
+        Err(_) => (T::default(), Rights::from_mode(default_mode)),
+    }
+}
+
 /// Read a file to a string.
 ///
 /// Returns the rights (mode, permissions) of this file.
