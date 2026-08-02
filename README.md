@@ -13,21 +13,21 @@ Declaratively bear (manage) Linux users and groups.
 - Warn about insecure password hashing schemes.
 - Manage `/etc/subuid` and `/etc/subgid` for rootless containers.
 
-### Where does it run?
-
-It is undeniable that Userborn finds its origin in NixOS. However, Userborn
-has been designed to work on any distro. It is effectively distro-agnostic. It
-will run on any Linux.
-
 ## Getting Started
 
 ### NixOS
 
-Userborn is available in Nixpkgs (nixos-unstable). To enable it:
+Userborn is available in Nixpkgs. To enable it:
 
 ```nix
 services.userborn.enable = true;
 ```
+
+### Other Distros
+
+While Userborn finds its origin in NixOS, it has been designed to work on any
+distro. However, there are currently no ready-to-use integrations for other
+distros. If you're interested in adding one, please reach out to me!
 
 ## Nondestructivity
 
@@ -85,6 +85,29 @@ and later added to the Userborn config. For example:
   `normalo` and take full ownership of the entire user.
 - When you now remove the user from the config, Userborn will disable the user
   on the next invocation.
+
+## Subordinate UID/GID Ranges
+
+Userborn writes `/etc/subuid` and `/etc/subgid` so that tools like
+`newuidmap`/`newgidmap` (used by rootless Podman, Docker, and similar) work
+out of the box.
+
+Per user you can either:
+
+- list explicit ranges via `subUidRanges` / `subGidRanges`, which are written
+  verbatim, or
+- set `autoSubIdRange: true` to have Userborn allocate a single 65536-wide
+  range at or above 100000 that does not overlap any other owner's ranges.
+
+Auto-allocated ranges are stable: once written they are read back from
+`/etc/sub{u,g}id` on subsequent runs and never moved, even if other ranges
+change around them. As with UIDs, entries for owners that disappear from the
+config are kept so the range cannot be reused by a different owner.
+
+If the resulting set of ranges overlaps across distinct owners (which can
+only happen via explicit configuration or pre-existing on-disk state),
+Userborn refuses to write `/etc/sub{u,g}id` and exits with an error. The
+other databases (`passwd`, `group`, `shadow`) are still written.
 
 ## Configuration
 
@@ -156,26 +179,3 @@ Userborn:
 ### Limitations
 
 - Currently doesn't support group passwords (and thus also doesn't support `/etc/gshadow`).
-
-## Subordinate UID/GID Ranges
-
-Userborn writes `/etc/subuid` and `/etc/subgid` so that tools like
-`newuidmap`/`newgidmap` (used by rootless Podman, Docker, and similar) work
-out of the box.
-
-Per user you can either:
-
-- list explicit ranges via `subUidRanges` / `subGidRanges`, which are written
-  verbatim, or
-- set `autoSubIdRange: true` to have Userborn allocate a single 65536-wide
-  range at or above 100000 that does not overlap any other owner's ranges.
-
-Auto-allocated ranges are stable: once written they are read back from
-`/etc/sub{u,g}id` on subsequent runs and never moved, even if other ranges
-change around them. As with UIDs, entries for owners that disappear from the
-config are kept so the range cannot be reused by a different owner.
-
-If the resulting set of ranges overlaps across distinct owners (which can
-only happen via explicit configuration or pre-existing on-disk state),
-Userborn refuses to write `/etc/sub{u,g}id` and exits with an error. The
-other databases (`passwd`, `group`, `shadow`) are still written.
