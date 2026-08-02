@@ -1,7 +1,12 @@
 [package]
 name = "userborn"
 version = "1.0.1"
+description = "Declaratively bear (manage) Linux users and groups"
+homepage = "https://github.com/nikstur/userborn"
+repository = "https://github.com/nikstur/userborn"
 edition = "2024"
+license = "MIT"
+readme = "README.md"
 
 [[bin]]
 name = "jsonschema"
